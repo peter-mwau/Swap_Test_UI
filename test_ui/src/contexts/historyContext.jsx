@@ -51,9 +51,19 @@ export function TransactionHistoryProvider({ children }) {
       const formattedTransactions = txHistoryData.map((tx, index) => {
         return {
           id: Number(tx.id) || index,
-          type: Number(tx.transactionType) === 0 ? "swap" : "liquidity",
-          token0Symbol: tx.fromToken || "TKN0", // Changed from token0Symbol to fromToken
-          token1Symbol: tx.toToken || "TKN1", // Changed from token1Symbol to toToken
+          type: Number(tx.transactionType) === 1 ? "swap" : "liquidity",
+          token0Symbol:
+            tx.fromToken === "0x013b1c8a9257b8f3931d6a02da84515d9a19049c"
+              ? "TKN0(USDC)"
+              : tx.fromToken === "0xc3fb06c0057c3a1f85e34caf99a150f77a52e724"
+              ? "TKN1(ABYATKN)"
+              : tx.fromToken || "TKN0",
+          token1Symbol:
+            tx.toToken === "0x013b1c8a9257b8f3931d6a02da84515d9a19049c"
+              ? "TKN0(USDC)"
+              : tx.toToken === "0xc3fb06c0057c3a1f85e34caf99a150f77a52e724"
+              ? "TKN1(ABYATKN)"
+              : tx.toToken || "TKN1",
           token0Amount: ethers.formatUnits(tx.fromAmount || 0, 18), // Changed from amount0 to fromAmount
           token1Amount: ethers.formatUnits(tx.toAmount || 0, 18), // Changed from amount1 to toAmount
           timestamp: new Date(Number(tx.timestamp || 0) * 1000),
