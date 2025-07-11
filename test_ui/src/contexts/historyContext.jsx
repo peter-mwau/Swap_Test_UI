@@ -53,15 +53,15 @@ export function TransactionHistoryProvider({ children }) {
           id: Number(tx.id) || index,
           type: Number(tx.transactionType) === 1 ? "swap" : "liquidity",
           token0Symbol:
-            tx.fromToken === "0x013b1c8a9257b8f3931d6a02da84515d9a19049c"
+            tx.fromToken === "0xac485503f2f2da0311159187374c0b568eb84e5a"
               ? "TKN0(USDC)"
-              : tx.fromToken === "0xc3fb06c0057c3a1f85e34caf99a150f77a52e724"
+              : tx.fromToken === "0xc1303afc18ab049bf0b9aab4231ac24ac93c92a4"
               ? "TKN1(ABYATKN)"
               : tx.fromToken || "TKN0",
           token1Symbol:
-            tx.toToken === "0x013b1c8a9257b8f3931d6a02da84515d9a19049c"
+            tx.toToken === "0xac485503f2f2da0311159187374c0b568eb84e5a"
               ? "TKN0(USDC)"
-              : tx.toToken === "0xc3fb06c0057c3a1f85e34caf99a150f77a52e724"
+              : tx.toToken === "0xc1303afc18ab049bf0b9aab4231ac24ac93c92a4"
               ? "TKN1(ABYATKN)"
               : tx.toToken || "TKN1",
           token0Amount: ethers.formatUnits(tx.fromAmount || 0, 18), // Changed from amount0 to fromAmount

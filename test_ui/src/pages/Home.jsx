@@ -775,24 +775,6 @@ const UniswapTestUI = () => {
         return;
       }
 
-      // ======= STEP 1: DEBUGGING SETUP =======
-      console.log("==== DEBUGGING LIQUIDITY ADDITION ====");
-      console.log("Contract addresses:", {
-        addSwapContract: CONTRACT_ADDRESSES.ADD_SWAP_CONTRACT,
-        uniswapPool: CONTRACT_ADDRESSES.UNISWAP_POOL,
-        token0Config: CONTRACT_ADDRESSES.TOKEN0,
-        token1Config: CONTRACT_ADDRESSES.TOKEN1,
-      });
-
-      // ======= STEP 2: EXAMINE CONTRACT SOURCE CODE =======
-      // Initialize the contract with a debug interface to examine its code
-      const contractBytecode = await signer.provider.getCode(
-        CONTRACT_ADDRESSES.ADD_SWAP_CONTRACT
-      );
-      console.log(
-        `Contract bytecode length: ${(contractBytecode.length - 2) / 2} bytes`
-      );
-
       // Initialize the contract
       const contract = new ethers.Contract(
         CONTRACT_ADDRESSES.ADD_SWAP_CONTRACT,
@@ -800,47 +782,35 @@ const UniswapTestUI = () => {
         signer
       );
 
-      // Check if the contract has the expected methods
-      try {
-        const methodCheck = {
-          positionManager: await contract
-            .positionManager()
-            .catch(() => "Not found"),
-          token0: await contract.token0().catch(() => "Not found"),
-          token1: await contract.token1().catch(() => "Not found"),
-          fee: await contract.fee().catch(() => "Not found"),
-        };
-
-        console.log("Contract method check:", methodCheck);
-      } catch (e) {
-        console.warn("Error checking contract methods:", e);
-      }
-
-      // ======= STEP 3: GET MINIMUM TEST AMOUNTS =======
-      // Try with very small amounts first to identify issues
-      const minimumAmount0 = "0.000001";
-      const minimumAmount1 = "0.000001";
-
-      console.log(
-        `Trying with minimum test amounts: ${minimumAmount0} and ${minimumAmount1}`
-      );
-
-      // ======= STEP 4: GET TOKEN DETAILS =======
+      // Get contract token addresses
       const contractToken0Address = await contract.token0();
       const contractToken1Address = await contract.token1();
 
+      console.log("Token addresses:", {
+        contract: {
+          token0: contractToken0Address,
+          token1: contractToken1Address,
+        },
+        config: {
+          token0: CONTRACT_ADDRESSES.TOKEN0,
+          token1: CONTRACT_ADDRESSES.TOKEN1,
+        },
+      });
+
+      // Get token contracts
       const token0Contract = new ethers.Contract(
         contractToken0Address,
-        USDC_ABI.abi, // Generic ERC20 ABI
+        USDC_ABI.abi, // Using as generic ERC20 ABI
         signer
       );
 
       const token1Contract = new ethers.Contract(
         contractToken1Address,
-        ABYTKN_ABI.abi, // Generic ERC20 ABI
+        ABYTKN_ABI.abi, // Using as generic ERC20 ABI
         signer
       );
 
+      // Get token details
       const token0Symbol = await token0Contract.symbol();
       const token1Symbol = await token1Contract.symbol();
       const token0Decimals = await token0Contract.decimals();
@@ -859,142 +829,128 @@ const UniswapTestUI = () => {
         },
       });
 
-      // ======= STEP 5: CHECK CONTRACT IMPLEMENTATION =======
-      try {
-        // Check the pool implementation details
-        const fee = await contract.fee();
-        console.log("Fee tier:", fee.toString());
+      // Determine which token is which in contract vs UI
+      const token0IsUsdc =
+        contractToken0Address.toLowerCase() ===
+        CONTRACT_ADDRESSES.TOKEN0.toLowerCase();
 
-        const positionManager = await contract.positionManager();
-        console.log("Position Manager:", positionManager);
-
-        // Try to detect if we need to create the pool first
-        const poolExistsResult = await contract
-          .poolExists()
-          .catch(() => "Function not found");
-        console.log("Pool exists check:", poolExistsResult);
-      } catch (e) {
-        console.warn("Error checking contract implementation:", e);
+      // Prepare the amounts based on token order
+      let amount0Desired, amount1Desired;
+      if (token0IsUsdc) {
+        amount0Desired = ethers.parseUnits(
+          liquidityData.token0Amount.toString(),
+          token0Decimals
+        );
+        amount1Desired = ethers.parseUnits(
+          liquidityData.token1Amount.toString(),
+          token1Decimals
+        );
+      } else {
+        amount0Desired = ethers.parseUnits(
+          liquidityData.token1Amount.toString(),
+          token0Decimals
+        );
+        amount1Desired = ethers.parseUnits(
+          liquidityData.token0Amount.toString(),
+          token1Decimals
+        );
       }
 
-      // ======= STEP 6: CHECK TRANSACTION DATA FORMAT =======
-      // Parse very small test amounts first
-      const testAmount0 = ethers.parseUnits(minimumAmount0, token0Decimals);
-      const testAmount1 = ethers.parseUnits(minimumAmount1, token1Decimals);
-
-      console.log("Test amounts:", {
-        amount0: { value: minimumAmount0, parsed: testAmount0.toString() },
-        amount1: { value: minimumAmount1, parsed: testAmount1.toString() },
+      console.log("Liquidity amounts:", {
+        amount0: {
+          token: token0Symbol,
+          value: ethers.formatUnits(amount0Desired, token0Decimals),
+        },
+        amount1: {
+          token: token1Symbol,
+          value: ethers.formatUnits(amount1Desired, token1Decimals),
+        },
       });
 
-      // ======= STEP 7: APPROVE TEST AMOUNTS =======
-      // Approve token0
-      const approvalTx0 = await token0Contract.approve(
-        CONTRACT_ADDRESSES.ADD_SWAP_CONTRACT,
-        ethers.MaxUint256
-      );
-      await approvalTx0.wait();
+      // Check balances
+      const balance0 = await token0Contract.balanceOf(address);
+      const balance1 = await token1Contract.balanceOf(address);
 
-      // Approve token1
-      const approvalTx1 = await token1Contract.approve(
-        CONTRACT_ADDRESSES.ADD_SWAP_CONTRACT,
-        ethers.MaxUint256
-      );
-      await approvalTx1.wait();
-
-      console.log("Approved test amounts");
-
-      // ======= STEP 8: CALL CONTRACT WITH RAW TRANSACTION =======
-      // This helps us see the exact transaction that's being sent
-      const addLiquidityData = contract.interface.encodeFunctionData(
-        "addLiquidity",
-        [testAmount0, testAmount1]
-      );
-
-      console.log("Encoded function data:", addLiquidityData);
-
-      // For the test transaction
-      const estimatedGas = await contract.addLiquidity.estimateGas(
-        testAmount0,
-        testAmount1
-      );
-      const buffer = (estimatedGas * 120n) / 100n; // 20% buffer
-
-      const rawTx = await signer.sendTransaction({
-        to: CONTRACT_ADDRESSES.ADD_SWAP_CONTRACT,
-        data: addLiquidityData,
-        gasLimit: buffer, // Use estimated gas + buffer
+      console.log("Current balances:", {
+        [token0Symbol]: ethers.formatUnits(balance0, token0Decimals),
+        [token1Symbol]: ethers.formatUnits(balance1, token1Decimals),
       });
 
-      console.log("Raw transaction sent:", rawTx.hash);
+      // Check if balances are sufficient
+      if (balance0 < amount0Desired) {
+        setError(`Insufficient ${token0Symbol} balance`);
+        setLoading(false);
+        return;
+      }
 
-      const receipt = await rawTx.wait();
-      console.log("Transaction receipt:", receipt);
+      if (balance1 < amount1Desired) {
+        setError(`Insufficient ${token1Symbol} balance`);
+        setLoading(false);
+        return;
+      }
 
-      if (receipt.status === 1) {
-        setSuccess(
-          "Test liquidity added successfully! Now proceeding with real amounts."
+      // Check and approve allowances
+      const allowance0 = await token0Contract.allowance(
+        address,
+        CONTRACT_ADDRESSES.ADD_SWAP_CONTRACT
+      );
+      const allowance1 = await token1Contract.allowance(
+        address,
+        CONTRACT_ADDRESSES.ADD_SWAP_CONTRACT
+      );
+
+      console.log("Current allowances:", {
+        [token0Symbol]: ethers.formatUnits(allowance0, token0Decimals),
+        [token1Symbol]: ethers.formatUnits(allowance1, token1Decimals),
+      });
+
+      // Approve token0 if needed
+      if (allowance0 < amount0Desired) {
+        console.log(`Approving ${token0Symbol}...`);
+        const tx0 = await token0Contract.approve(
+          CONTRACT_ADDRESSES.ADD_SWAP_CONTRACT,
+          ethers.MaxUint256
         );
+        await tx0.wait();
+        console.log(`${token0Symbol} approved`);
+      }
 
-        // ======= STEP 9: NOW TRY WITH REAL AMOUNTS =======
-        // If test was successful, try with the actual amounts
-        let amount0Desired, amount1Desired;
+      // Approve token1 if needed
+      if (allowance1 < amount1Desired) {
+        console.log(`Approving ${token1Symbol}...`);
+        const tx1 = await token1Contract.approve(
+          CONTRACT_ADDRESSES.ADD_SWAP_CONTRACT,
+          ethers.MaxUint256
+        );
+        await tx1.wait();
+        console.log(`${token1Symbol} approved`);
+      }
 
-        // Check which token is which in contract vs UI
-        const token0IsUsdc =
-          contractToken0Address.toLowerCase() ===
-          CONTRACT_ADDRESSES.TOKEN0.toLowerCase();
+      // Add liquidity
+      console.log("Adding liquidity...");
 
-        if (token0IsUsdc) {
-          amount0Desired = ethers.parseUnits(
-            liquidityData.token0Amount.toString(),
-            token0Decimals
-          );
-          amount1Desired = ethers.parseUnits(
-            liquidityData.token1Amount.toString(),
-            token1Decimals
-          );
-        } else {
-          amount0Desired = ethers.parseUnits(
-            liquidityData.token1Amount.toString(),
-            token0Decimals
-          );
-          amount1Desired = ethers.parseUnits(
-            liquidityData.token0Amount.toString(),
-            token1Decimals
-          );
-        }
+      // Try to estimate gas first
+      try {
+        const gasEstimate = await contract.estimateGas.addLiquidity(
+          amount0Desired,
+          amount1Desired
+        );
+        console.log("Gas estimate:", gasEstimate.toString());
 
-        console.log("Real amounts:", {
-          amount0: {
-            token: token0Symbol,
-            value: ethers.formatUnits(amount0Desired, token0Decimals),
-          },
-          amount1: {
-            token: token1Symbol,
-            value: ethers.formatUnits(amount1Desired, token1Decimals),
-          },
+        // Add 20% buffer to gas estimate
+        const gasLimit = (gasEstimate * 120n) / 100n;
+
+        const tx = await contract.addLiquidity(amount0Desired, amount1Desired, {
+          gasLimit: gasLimit,
         });
 
-        // Now try with the actual amounts
-        const realAddLiquidityData = contract.interface.encodeFunctionData(
-          "addLiquidity",
-          [amount0Desired, amount1Desired]
-        );
+        setTxHash(tx.hash);
+        console.log("Transaction sent:", tx.hash);
 
-        const realTx = await signer.sendTransaction({
-          to: CONTRACT_ADDRESSES.ADD_SWAP_CONTRACT,
-          data: realAddLiquidityData,
-          gasLimit: 1500000,
-        });
+        const receipt = await tx.wait();
+        console.log("Transaction receipt:", receipt);
 
-        console.log("Real transaction sent:", realTx.hash);
-        setTxHash(realTx.hash);
-
-        const realReceipt = await realTx.wait();
-        console.log("Real transaction receipt:", realReceipt);
-
-        if (realReceipt.status === 1) {
+        if (receipt.status === 1) {
           setSuccess("Liquidity added successfully!");
           setLiquidityData({
             token0Amount: "",
@@ -1005,10 +961,35 @@ const UniswapTestUI = () => {
             refreshHistory();
           }
         } else {
-          setError("Real transaction failed");
+          setError("Transaction failed");
         }
-      } else {
-        setError("Test transaction failed");
+      } catch (gasError) {
+        console.warn("Gas estimation failed:", gasError);
+
+        // If gas estimation fails, try with fixed gas limit
+        const tx = await contract.addLiquidity(amount0Desired, amount1Desired, {
+          gasLimit: 1500000, // Set high fixed gas limit
+        });
+
+        setTxHash(tx.hash);
+        console.log("Transaction sent with fixed gas limit:", tx.hash);
+
+        const receipt = await tx.wait();
+        console.log("Transaction receipt:", receipt);
+
+        if (receipt.status === 1) {
+          setSuccess("Liquidity added successfully!");
+          setLiquidityData({
+            token0Amount: "",
+            token1Amount: "",
+          });
+          loadBalances();
+          if (typeof refreshHistory === "function") {
+            refreshHistory();
+          }
+        } else {
+          setError("Transaction failed");
+        }
       }
     } catch (error) {
       console.error("Add liquidity failed:", error);
@@ -1023,20 +1004,13 @@ const UniswapTestUI = () => {
         } else if (error.message.includes("insufficient funds")) {
           errorMsg = "Insufficient funds for gas";
         } else if (error.message.includes("execution reverted")) {
+          errorMsg = "Transaction reverted by contract";
+
           // Try to extract more information from the error
-          try {
-            // Some nodes return error data in the error object
-            if (error.data) {
-              errorMsg = `Contract error: ${error.data}`;
-            } else if (error.error && error.error.data) {
-              const errorData = error.error.data;
-              errorMsg = `Contract error: ${errorData}`;
-            } else {
-              errorMsg =
-                "Transaction reverted by contract - check contract implementation";
-            }
-          } catch (e) {
-            errorMsg = "Transaction reverted by contract";
+          if (error.data) {
+            errorMsg += ` - ${error.data}`;
+          } else if (error.error && error.error.data) {
+            errorMsg += ` - ${error.error.data}`;
           }
         } else {
           errorMsg += `: ${error.message}`;
@@ -2169,7 +2143,7 @@ const UniswapTestUI = () => {
                         )?.isValidRatio &&
                           !isInitialRatio)
                       }
-                      className="w-full bg-gradient-to-r from-green-600 to-blue-600 text-white px-6 py-4 rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+                      className="w-full bg-gradient-to-r from-green-600 to-blue-600 text-white px-6 py-4 rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 hover:cursor-pointer"
                     >
                       {loading ? (
                         <>
