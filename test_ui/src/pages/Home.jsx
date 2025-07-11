@@ -20,6 +20,7 @@ import {
   Wallet2,
   Power,
   RefreshCw,
+  Minus,
 } from "lucide-react";
 import { useEthersSigner } from "../components/useClientSigner";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
@@ -34,6 +35,7 @@ import USDC_ABI from "../artifacts/usdc.json";
 import ABYTKN_ABI from "../artifacts/abyatkn.json";
 
 import CONTRACT_ABI from "../artifacts/add_swap_contract.json";
+import RemoveLiquidity from "../components/removeLiquidity";
 const contractAbi = CONTRACT_ABI.abi;
 const usdcAbi = USDC_ABI.abi;
 const abyatknAbi = ABYTKN_ABI.abi;
@@ -1581,6 +1583,17 @@ const UniswapTestUI = () => {
                   Add Liquidity
                 </button>
                 <button
+                  onClick={() => setActiveTab("removeLiquidity")}
+                  className={`flex-1 px-6 py-4 font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
+                    activeTab === "removeLiquidity"
+                      ? "bg-blue-600 text-white"
+                      : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <Minus size={20} />
+                  Remove Liquidity
+                </button>
+                <button
                   onClick={() => setActiveTab("history")}
                   className={`flex-1 px-6 py-4 font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
                     activeTab === "history"
@@ -2190,6 +2203,8 @@ const UniswapTestUI = () => {
                   </div>
                 )}
 
+                {activeTab === "removeLiquidity" && <RemoveLiquidity />}
+
                 {/* Transaction History Tab */}
                 {activeTab === "history" && (
                   <div className="space-y-4">
@@ -2520,7 +2535,7 @@ const UniswapTestUI = () => {
                     className="text-green-600 inline-block mr-2"
                   />
                   Transaction successful! Hash:{" "}
-                  <span className="font-mono truncate max-w-[300px]">
+                  <span className="font-mono truncate w-[200px] relative text-wrap">
                     {txHash}
                   </span>
                 </div>

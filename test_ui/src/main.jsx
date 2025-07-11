@@ -5,13 +5,16 @@ import App from "./App.jsx";
 import { BrowserRouter } from "react-router-dom";
 import Providers from "./providers/Provider.jsx";
 import { TransactionHistoryProvider } from "./contexts/historyContext.jsx";
+import { UserPositionProvider } from "./contexts/userPositionContext.jsx";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <BrowserRouter>
       <Providers>
         <TransactionHistoryProvider>
-          <App />
+          <UserPositionProvider>
+            <App />
+          </UserPositionProvider>
         </TransactionHistoryProvider>
       </Providers>
     </BrowserRouter>
